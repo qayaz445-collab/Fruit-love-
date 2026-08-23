@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Fruit Shoot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width:100%; height:100%; overflow:hidden;
+    font-family:'Baloo 2', sans-serif;
+    background: #5c3a1e;
+  }
+  #game-container {
+    position:relative; width:100vw; height:100vh;
+    background:
+      repeating-linear-gradient(
+        180deg,
+        #9a6a3a 0px, #9a6a3a 38px,
+        #8a5c30 38px, #8a5c30 40px
+      );
+    overflow:hidden;
+  }
+  #game-container::before {
+    content:"";
+    position:absolute; inset:0;
+    background: repeating-linear-gradient(
+      90deg,
+      rgba(0,0,0,0.05) 0px, rgba(0,0,0,0.05) 2px,
+      transparent 2px, transparent 140px
+    );
+    pointer-events:none;
+  }
+  #gameCanvas { position:absolute; top:0; left:0; display:block; cursor:crosshair; }
+
+  #hud {
+    position:absolute; top:16px; left:0; width:100%;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    padding:0 16px; pointer-events:none; z-index:5;
+  }
+  .plank {
+    background: linear-gradient(180deg, #7a4a22, #5c3616);
+    border:3px solid #3f2610;
+    border-radius:12px;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.15);
+  }
+  #scoreBox {
+    padding:8px 22px;
+    color:#f4e4c1;
+    font-weight:800;
+    font-size:22px;
+    text-shadow: 0 2px 0 rgba(0,0,0,0.4);
+    letter-spacing:0.5px;
+  }
+  #scoreBox span { color:#ffd23f; }
+  #missesBox {
+    padding:8px 14px;
+    display:flex; align-items:center; gap:8px;
+  }
+  #missesBox .label { color:#f4e4c1; font-weight:700; font-size:14px; margin-right:2px; }
+  .miss-dot {
+    width:14px; height:14px; border-radius:50%;
+    background: rgba(244,228,193,0.15);
+    border:2px solid #f4e4c1;
+    transition: background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+  }
+  .miss-dot.filled {
+    background: #ff3b3b;
+    border-color:#ff8080;
+    box-shadow: 0 0 8px rgba(255,59,59,0.8);
+    transform: scale(1.15);
+  }
+
+  #overlay {
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    background: rgba(20,10,4,0.55);
+    z-index:20;
+    opacity:0; pointer-events:none;
+    transition: opacity 0.35s ease;
+  }
+  #overlay.show { opacity:1; pointer-events:auto; }
+  #overlayPanel {
+    background: linear-gradient(180deg, #8a5a2e, #5c3616);
+    border:5px solid #3f2610;
+    border-radius:20px;
+    padding:36px 46px;
+    text-align:center;
+    box-shadow: 0 10px 0 rgba(0,0,0,0.4), 0 20px 40px rgba(0,0,0,0.5);
+    transform: scale(0.6);
+    opacity:0;
+    transition: transform 0.4s cubic-bezier(.34,1.56,.64,1), opacity 0.3s ease;
+  }
+  #overlay.show #overlayPanel { transform: scale(1); opacity:1; }
+  #gameOverTitle {
+    font-size:46px; font-weight:800; color:#ff5252;
+    text-shadow: 0 3px 0 rgba(0,0,0,0.5);
+    letter-spacing:1px;
+    margin-bottom:8px;
+  }
+  #finalScoreText {
+    font-size:20px; color:#f4e4c1; font-weight:700; margin-bottom:22px;
+  }
+  #finalScoreText span { color:#ffd23f; font-size:26px; }
+  #startBtn {
+    font-family:'Baloo 2', sans-serif;
+    font-size:22px; font-weight:800; color:#3f2610;
+    background: linear-gradient(180deg, #ffd23f, #ffb100);
+    border:3px solid #7a4a22;
+    border-radius:14px;
+    padding:12px 34px;
+    cursor:pointer;
+    box-shadow: 0 5px 0 #a86e10;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+  #startBtn:active { transform: translateY(4px); box-shadow: 0 1px 0 #a86e10; }
+
+  #startScreen {
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    z-index:30; gap:18px;
+    background: rgba(20,10,4,0.35);
+  }
+  #startScreen h1 {
+    font-size:44px; color:#ffd23f; text-shadow:0 3px 0 rgba(0,0,0,0.5);
+  }
+  #startScreen p { color:#f4e4c1; font-size:16px; max-width:320px; text-align:center; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="hud">
+    <div id="scoreBox" class="plank">SCORE: <span id="scoreVal">0</span></div>
+    <div id="missesBox" class="plank">
+      <span class="label">MISS</span>
+      <div class="miss-dot" data-i="0"></div>
+      <div class="miss-dot" data-i="1"></div>
+      <div class="miss-dot" data-i="2"></div>
+      <div class="miss-dot" data-i="3"></div>
+      <div class="miss-dot" data-i="4"></div>
+    </div>
+  </div>
+
+  <div id="startScreen">
+    <h1>🍉 Fruit Shoot 🍎</h1>
+    <p>Fruits par click karke shoot karo. Bomb 💣 se bacho, aur fruit ko zameen par mat girne do!</p>
+    <button id="startBtn2" class="plank" style="padding:14px 40px; font-size:22px; font-weight:800; color:#ffd23f; cursor:pointer; border:3px solid #3f2610;">START GAME</button>
+  </div>
+
+  <div id="overlay">
+    <div id="overlayPanel">
+      <div id="gameOverTitle">GAME OVER</div>
+      <div id="finalScoreText">Score: <span id="finalScoreVal">0</span></div>
+      <button id="startBtn">START AGAIN</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  let W, H, DPR;
+
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W+'px'; canvas.style.height = H+'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- Game State ----------
+  let score = 0, misses = 0, maxMisses = 5;
+  let fruits = [], particles = [], bullets = [];
+  let gameRunning = false;
+  let spawnTimer = 0, spawnInterval = 1100;
+  let lastTime = performance.now();
+  let shakeTime = 0, shakeMag = 0;
+
+  const gun = { x:0, y:0, angle:-Math.PI/2, targetAngle:-Math.PI/2, revertAt:0 };
+
+  const FRUIT_TYPES = [
+    {emoji:'🍎', color:'#e63946'},
+    {emoji:'🍊', color:'#ff9f1c'},
+    {emoji:'🍋', color:'#ffd23f'},
+    {emoji:'🍇', color:'#8e44ad'},
+    {emoji:'🍉', color:'#2dd881'},
+    {emoji:'🍓', color:'#ff3366'},
+    {emoji:'🍑', color:'#ffb4a2'},
+    {emoji:'🍍', color:'#ffc93c'}
+  ];
+
+  function rand(a,b){ return a + Math.random()*(b-a); }
+
+  function updateHUD(){
+    document.getElementById('scoreVal').textContent = score;
+    const dots = document.querySelectorAll('.miss-dot');
+    dots.forEach((d,i)=> d.classList.toggle('filled', i < misses));
+  }
+
+  function spawnObject(){
+    const isBomb = Math.random() < Math.min(0.12 + score*0.0015, 0.28);
+    const size = rand(44, 60);
+    const x = rand(size, W - size);
+    const obj = {
+      isBomb,
+      type: isBomb ? null : FRUIT_TYPES[Math.floor(Math.random()*FRUIT_TYPES.length)],
+      x, y: H + size,
+      vx: rand(-1.6, 1.6),
+      vy: -rand(14, 17.5),
+      size,
+      rotation: rand(0, Math.PI*2),
+      rotSpeed: rand(-0.04, 0.04),
+      frozen:false,
+      sparkPhase: Math.random()*10
+    };
+    fruits.push(obj);
+  }
+
+  // ---------- Explosions ----------
+  function burst(x, y, color, count, big){
+    for(let i=0;i<count;i++){
+      const ang = rand(0, Math.PI*2);
+      const speed = big ? rand(3,9) : rand(1.5,5.5);
+      particles.push({
+        x, y,
+        vx: Math.cos(ang)*speed,
+        vy: Math.sin(ang)*speed - rand(0,2),
+        size: rand(4, big?11:8),
+        color,
+        rotation: rand(0,Math.PI*2),
+        rotSpeed: rand(-0.15,0.15),
+        life:0,
+        maxLife: rand(450,750)
+      });
+    }
+  }
+
+  // Returns the t (0..1, clamped) of the closest point on segment (x1,y1)-(x2,y2) to point (px,py)
+  function projectT(x1,y1,x2,y2,px,py){
+    const dx = x2-x1, dy = y2-y1;
+    const lenSq = dx*dx + dy*dy;
+    if(lenSq === 0) return 0;
+    let t = ((px-x1)*dx + (py-y1)*dy) / lenSq;
+    return Math.max(0, Math.min(1, t));
+  }
+
+  function handleHit(px,py){
+    if(!gameRunning) return;
+    const gx = gun.x, gy = gun.y;
+
+    gun.targetAngle = Math.atan2(py-gy, px-gx);
+    gun.revertAt = performance.now() + 260;
+
+    const dist = Math.hypot(px-gx, py-gy);
+    const duration = Math.min(260, Math.max(90, dist*0.35));
+
+    // find every fruit lying along the line of fire
+    const hits = [];
+    for(const f of fruits){
+      if(f.frozen) continue;
+      const t = projectT(gx,gy,px,py,f.x,f.y);
+      const cx = gx + (px-gx)*t, cy = gy + (py-gy)*t;
+      const d = Math.hypot(f.x-cx, f.y-cy);
+      const r = f.size*0.42 + 16;
+      if(d <= r){
+        hits.push({f, t});
+      }
+    }
+    hits.sort((a,b)=>a.t-b.t);
+    hits.forEach(h => { h.f.frozen = true; });
+
+    bullets.push({
+      x: gx, y: gy,
+      targetX: px, targetY: py,
+      startTime: performance.now(),
+      duration,
+      hits,
+      triggered: 0
+    });
+  }
+
+  function triggerBombHit(bomb){
+    burst(bomb.x, bomb.y, '#ff5c33', 34, true);
+    burst(bomb.x, bomb.y, '#333333', 14, true);
+    fruits = fruits.filter(f=>f!==bomb);
+    shakeTime = 350; shakeMag = 10;
+    endGame();
+  }
+
+  function endGame(){
+    gameRunning = false;
+    document.getElementById('finalScoreVal').textContent = score;
+    setTimeout(()=>{
+      document.getElementById('overlay').classList.add('show');
+    }, 220);
+  }
+
+  // ---------- Drawing ----------
+  function drawGun(){
+    ctx.save();
+    ctx.translate(gun.x, gun.y);
+    // base
+    ctx.fillStyle = '#4a2f16';
+    ctx.strokeStyle = '#2c1a0a';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(0, 8, 30, 16, 0, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke();
+    // barrel
+    ctx.rotate(gun.angle + Math.PI/2);
+    ctx.fillStyle = '#6b4423';
+    ctx.strokeStyle = '#2c1a0a';
+    const grad = ctx.createLinearGradient(-14,0,14,0);
+    grad.addColorStop(0,'#7a5227');
+    grad.addColorStop(0.5,'#8a5f30');
+    grad.addColorStop(1,'#5c3d1c');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.roundRect(-13, -46, 26, 50, 8);
+    ctx.fill(); ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0,-46,15,0,Math.PI*2);
+    ctx.fillStyle = '#7a5227';
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawFruit(f){
+    ctx.save();
+    ctx.translate(f.x, f.y);
+    ctx.rotate(f.rotation);
+    ctx.font = f.size + 'px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if(f.isBomb){
+      ctx.fillText('💣', 0, 0);
+    } else {
+      ctx.fillText(f.type.emoji, 0, 0);
+    }
+    ctx.restore();
+
+    if(f.isBomb){
+      const flick = 0.5 + 0.5*Math.sin(performance.now()/60 + f.sparkPhase);
+      ctx.save();
+      ctx.translate(f.x + f.size*0.22, f.y - f.size*0.4);
+      ctx.beginPath();
+      ctx.arc(0,0, 3+flick*3, 0, Math.PI*2);
+      ctx.fillStyle = flick>0.5 ? '#fff4b0' : '#ff5c33';
+      ctx.shadowColor = '#ffcf5c';
+      ctx.shadowBlur = 10;
+      ctx.fill();
+      ctx.restore();
+    }
+
+    if(f.frozen){
+      const pulse = 4 + 2*Math.sin(performance.now()/70);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, f.size*0.42 + pulse, 0, Math.PI*2);
+      ctx.strokeStyle = 'rgba(255,220,80,0.85)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function drawBullet(b, t){
+    const ex = b.x + (b.targetX-b.x)*t;
+    const ey = b.y + (b.targetY-b.y)*t;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,180,60,0.5)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(b.x,b.y);
+    ctx.lineTo(ex,ey);
+    ctx.stroke();
+    const grad = ctx.createRadialGradient(ex,ey,0,ex,ey,9);
+    grad.addColorStop(0,'#fff6d0');
+    grad.addColorStop(0.4,'#ffd23f');
+    grad.addColorStop(1,'rgba(255,107,53,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(ex,ey,9,0,Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+    return {ex,ey};
+  }
+
+  function drawParticle(p){
+    const alpha = Math.max(0, 1 - p.life/p.maxLife);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(p.x,p.y);
+    ctx.rotate(p.rotation);
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.ellipse(0,0,p.size, p.size*0.6, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // ---------- Update ----------
+  function update(dt){
+    gun.x = W/2; gun.y = H - 26;
+
+    if(performance.now() > gun.revertAt){
+      gun.targetAngle = -Math.PI/2;
+    }
+    gun.angle += (gun.targetAngle - gun.angle) * 0.25;
+
+    if(gameRunning){
+      spawnTimer += dt*16.67;
+      if(spawnTimer > spawnInterval){
+        spawnTimer = 0;
+        spawnInterval = Math.max(650, 1150 - score*4);
+        spawnObject();
+      }
+
+      for(let i = fruits.length-1; i>=0; i--){
+        const f = fruits[i];
+        if(f.frozen) continue;
+        f.vy += 0.22*dt;
+        f.x += f.vx*dt;
+        f.y += f.vy*dt;
+        f.rotation += f.rotSpeed*dt;
+
+        const half = f.size*0.42;
+        if(f.x - half < 0){ f.x = half; f.vx = Math.abs(f.vx); }
+        if(f.x + half > W){ f.x = W - half; f.vx = -Math.abs(f.vx); }
+
+        if(f.y - f.size*0.5 > H && f.vy > 0){
+          fruits.splice(i,1);
+          if(!f.isBomb){
+            misses++;
+            updateHUD();
+            if(misses >= maxMisses){
+              endGame();
+            }
+          }
+        }
+      }
+    }
+
+    for(let i = bullets.length-1; i>=0; i--){
+      const b = bullets[i];
+      const t = (performance.now() - b.startTime) / b.duration;
+
+      while(b.triggered < b.hits.length && b.hits[b.triggered].t <= Math.min(t,1)){
+        const f = b.hits[b.triggered].f;
+        if(fruits.includes(f)){
+          if(f.isBomb){
+            triggerBombHit(f);
+            b.triggered = b.hits.length;
+            break;
+          } else {
+            burst(f.x, f.y, f.type.color, 12, false);
+            fruits = fruits.filter(fr=>fr!==f);
+            score++;
+            updateHUD();
+          }
+        }
+        b.triggered++;
+      }
+
+      if(t >= 1){
+        bullets.splice(i,1);
+      }
+    }
+
+    for(let i = particles.length-1; i>=0; i--){
+      const p = particles[i];
+      p.life += dt*16.67;
+      p.vy += 0.12*dt;
+      p.x += p.vx*dt;
+      p.y += p.vy*dt;
+      p.rotation += p.rotSpeed*dt;
+      if(p.life >= p.maxLife) particles.splice(i,1);
+    }
+
+    if(shakeTime > 0) shakeTime -= dt*16.67;
+  }
+
+  function render(){
+    ctx.clearRect(0,0,W,H);
+    ctx.save();
+    if(shakeTime > 0){
+      const m = shakeMag * (shakeTime/350);
+      ctx.translate(rand(-m,m), rand(-m,m));
+    }
+
+    fruits.forEach(drawFruit);
+    bullets.forEach(b=>{
+      const t = Math.min(1,(performance.now()-b.startTime)/b.duration);
+      drawBullet(b,t);
+    });
+    particles.forEach(drawParticle);
+    drawGun();
+
+    ctx.restore();
+  }
+
+  function loop(now){
+    const dt = Math.min(2.5, (now-lastTime)/16.67);
+    lastTime = now;
+    update(dt);
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- Input ----------
+  function getPos(e){
+    const rect = canvas.getBoundingClientRect();
+    const cx = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    const cy = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+    return {x:cx, y:cy};
+  }
+  canvas.addEventListener('pointerdown', (e)=>{
+    const p = getPos(e);
+    handleHit(p.x, p.y);
+  });
+
+  // ---------- Game Flow ----------
+  function resetState(){
+    score = 0; misses = 0;
+    fruits = []; particles = []; bullets = [];
+    spawnTimer = 0; spawnInterval = 1100;
+    updateHUD();
+  }
+
+  function startGame(){
+    resetState();
+    document.getElementById('overlay').classList.remove('show');
+    document.getElementById('startScreen').classList.add('hidden');
+    gameRunning = true;
+  }
+
+  document.getElementById('startBtn2').addEventListener('click', startGame);
+  document.getElementById('startBtn').addEventListener('click', startGame);
+
+  updateHUD();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
